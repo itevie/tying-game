@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Typing Game</title>
+</head>
+
+<body>
+    <div id="miku" class="miku">
+        <img id="mikuimg" src="Untitled.png">
+        <button onclick="location.reload()">Damn it, let me try again.</button>
+    </div>
+    <div class="ui">
+        <div class="stats">
+            <b>Your Current Stats:</b><br>
+            <label id="stats"></label>
+        </div>
+        <div class="keyPressIndicator">
+            <b>Key Pressed:</b>
+            <label id="currentKeyPress"></label>
+        </div>
+        <div class="currentWordWrapper">
+            <b>Current Word:</b><br>
+            <label id="currentWord"></label>
+        </div>
+        <div class="wordList">
+            <b>Your Words: </b>
+            <p id="wordList"></p>
+        </div>
+    </div>
+</body>
+<script>
+    let choiceWords = ["hello", "your mother", "gay", "among us", "uwu", "mokocchi", "tokocchi"]
+    let words = [];
+    let word = null;
+    let restWord = null;
+    let doneWord = null;
+    let errors = 0;
+    let correct = 0;
+    let thisWordErrors = 0;
+    let score = 0;
+    let potScore = 0;
+    let ready = false;
+    let addWordInterval = null;
+    let updateRenderInterval = null;
+    let level = {
+        len: {
+            min: 2,
+            max: 4
+        },
+        speed: 1500,
+        lifeDown: 120
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+        let a = await fetch(
+            "https://raw.githubusercontent.com/first20hours/google-10000-english/master/google-10000-english-no-swears.txt"
+        );
+        let t = await a.text();
+        let sp = t.split("\n");
+        for (let i in sp) sp[i] = sp[i].trim();
+        let s = sp.sort((a, b) => a.length - b.length);
+        s.shift();
+        choiceWords = s;
+        isReady();
+    })
+
+    document.onkeypress = (e) => {
+        if (ready == false) return;
+        document.getElementById("currentKeyPress").innerHTML = e.key;
+        if (word == null) {
+            for (let i in words) {
+                if (words[i].word.startsWith(e.key)) {
+                    word = words[i].word;
+                    break;
+                }
+            }
+            doneWord = e.key;
+            restWord = word.substr(1);
+            render();
+        } else {
+            if (restWord[0] == e.key) {
+                restWord = restWord.substr(1);
+                doneWord += e.key;
+
+                if (doneWord == word) {
+                    for (let i in words) {
+                        if (words[i].word == word) {
+                            words.splice(words.indexOf(words[i]), 1);
+                        }
+                    }
+                    render();
+                    potScore += word.length;
+                    score += word.length - thisWordErrors;
+                    word = null;
+                    restWord = null;
+                    doneWord = null;
+                    correct++;
+                    thisWordErrors = 0;
+                    updateLevel();
+                }
+                render();
+            } else {
+                errors++;
+                thisWordErrors++;
+            }
+        }
+    };
+
+    function updateLevel() {
+        console.log(level, correct)
+        if (correct % 10 == 0) level.len.max++;
+        if (correct % 30 == 0) level.len.min++;
+        if (correct % 20 == 0) level.speed = Math.max(600, level.speed - 100);
+        if (correct % 5 == 0) level.lifeDown = Math.max(25, level.lifeDown - 3);
+    }
+
+    function isReady() {
+        ready = true;
+        addWordTimer();
+
+        lifeDownTimer();
+    }
+
+    async function addWordTimer() {
+        if (level == null) return;
+        addWord();
+        setTimeout(() => {
+            addWordTimer();
+        }, level.speed);
+    }
+
+    function lifeDownTimer() {
+        if (level == null) return;
+        for (let i in words) {
+            words[i].life -= Math.floor(Math.random() * 3);
+            if (words[i].life <= 0) {
+                words.splice(i, 1);
+                die();
+            }
+        }
+        render();
+        setTimeout(() => {
+            lifeDownTimer();
+        }, level.lifeDown);
+    }
+
+    function addWord() {
+        let newWord = "";
+        let tries = 0;
+        do {
+            do {
+                newWord = choiceWords[Math.floor(Math.random() * choiceWords.length)];
+            } while (newWord.length < level.len.min || newWord.length > level.len.max);
+            tries++;
+            if (tries > 10) return;
+        } while (words.find(x => x.word[0] == newWord[0]));
+
+        words.push({
+            word: newWord,
+            life: 200 - (Math.random() > 0.7 ? Math.floor(Math.random() * 100) : 0)
+        });
+        render();
+    }
+
+    function render() {
+        document.getElementById("wordList").innerHTML = "";
+        if (word != null) {
+            let cWord = `<label style="color: green">${doneWord}</label>`;
+            cWord += `<label style="color: red">${restWord}</label>`;
+            document.getElementById("currentWord").innerHTML = cWord;
+        } else document.getElementById("currentWord").innerHTML = "";
+        document.getElementById("stats").innerHTML =
+            `Score: ${score} Accuracy: ${percentage(score, potScore).toFixed(2)}% Correct: ${correct} Errors: ${errors} Words: ${words.length}`;
+        document.getElementById("stats").innerHTML +=
+            `<br>Word Min & Max Length: ${level.len.min} / ${level.len.max}<br>Word Add Speed: ${level.speed / 1000}s/word<br>Word Life ms: ${level.lifeDown}ms/hp`;
+        for (let i in words) {
+            let r = (0 + (255 - words[i].life)).toString(16);
+            let g = (255 - (255 - words[i].life)).toString(16);
+            document.getElementById("wordList").innerHTML +=
+                `<label style="color: #${r}${g}00">${words[i].word}</label>&nbsp;`;
+        }
+    }
+
+    function die() {
+        alert(
+            `Your final score was ${potScore}/${score} (${percentage(score, potScore)}%), you got ${correct} correct and made ${errors} errors`);
+        level = null;
+        document.getElementById("miku").style.display = "block";
+        var audio = new Audio('gay.mp3');
+        audio.play();
+    }
+
+    function percentage(partialValue, totalValue) {
+        return (100 * partialValue) / totalValue;
+    }
+</script>
+<style>
+    body {
+        margin: 0;
+    }
+
+    .miku {
+        z-index: 100000000000;
+        position: fixed;
+        width: 100vw;
+        height: 100vh;
+        display: none;
+    }
+
+    .miku>img {
+        z-index: 1000000000001;
+        top: 50%;
+        left: 50%;
+        -webkit-transform: translate(-50%, -50%);
+        transform: translate(-50%, -50%);
+        animation: desune 60s ease-in-out infinite alternate;
+    }
+
+    .miku>button {
+        z-index: 19999999999999999999999999999;
+    }
+
+    @keyframes desune {
+        0% {
+            transform: scale(1.0);
+        }
+
+        50% {
+            trasform: scale(2.0);
+        }
+
+        100% {
+            transform: rotate(300deg);
+            transform: scale(10.0);
+        }
+    }
+
+    .keyPressIndicator {
+        display: inline-block;
+        text-align: center;
+        border-style: solid;
+        border-width: 5px;
+        border-radius: 10px;
+        width: 100px;
+        min-height: 100px;
+    }
+
+    .stats {
+        text-align: center;
+        border-style: solid;
+        border-width: 5px;
+        border-radius: 10px;
+        width: 520px;
+        min-height: 100px;
+    }
+
+    .keyPressIndicator>b {
+        margin: 3px;
+    }
+
+    .keyPressIndicator>label {
+        position: relative;
+        font-size: 30px;
+        top: 20px;
+    }
+
+    .wordList {
+        text-align: center;
+        border-style: solid;
+        border-width: 5px;
+        border-radius: 10px;
+        width: 500px;
+        ;
+        min-height: 100px;
+        word-wrap: break-word;
+        padding: 10px;
+        font-size: 25px;
+    }
+
+    .currentWordWrapper {
+        top: 0;
+        left: 130px;
+        top: 130px;
+        position: absolute;
+        text-align: center;
+        border-style: solid;
+        border-width: 5px;
+        border-radius: 10px;
+        min-width: 390px;
+        height: 100px;
+    }
+
+    .ui {
+        margin: 10px;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        -webkit-transform: translate(-50%, -50%);
+        transform: translate(-50%, -50%);
+        border-style: solid;
+        border-width: 10px;
+        border-radius: 10px;
+        border-color: green;
+    }
+
+    .ui>div {
+        margin: 10px;
+    }
+
+    #currentWord {
+        font-size: 50px;
+    }
+
+    * {
+        background-color: #222222;
+        color: white;
+        border-color: #00ff00;
+    }
+</style>
+
+</html>
